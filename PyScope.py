@@ -1,9 +1,3 @@
-#!/usr/bin/python3
-"""
-python class to control Rohde-Schwarz RTP scope based on the RsInstrument package and pyvisa
-
-"""
-
 from RsInstrument import *  # The RsInstrument package is hosted on pypi.org, see Readme.txt for more details
 
 resource_string_1 = 'TCPIP::131.225.137.193::inst0::INSTR'  # Standard LAN connection (also called VXI-11)
@@ -39,8 +33,9 @@ class Control(object):
 
 
         try:
-            self.instr = RsInstrument(self.instrAdd)
-            self.instr.VisaTimeout = 10000
+            self.instr = RsInstrument(self.instrAdd,"VisaTimeout=60000",reset=False)#,"OpcTimeout=60000","OpcWaitMode=OpcQuery")
+            #self.instr.VisaTimeout = 60000
+            #self.instr.OpcTimeout = 60000
             self.instr.instrument_status_checking=True
 
             if LOG: self.instr.logger.log_to_console = True; self.instr.logger.mode = LoggingMode.On
@@ -54,8 +49,8 @@ class Control(object):
         self.instr.close()
 
     def preP(self,dtype='INT,8'):
-        COMM = 'SYSTem:DISPlay:UPDate ON'
-        self.instr.write_str(COMM)
+        #COMM = 'SYSTem:DISPlay:UPDate ON'
+        #self.instr.write_str(COMM)
         # Normal mode Trig
         self.instr.write_str('TRIG1:MODE NORM')
         # Exter mode Trig
@@ -67,6 +62,8 @@ class Control(object):
     
         self.instr.query_opc()
 
+    def reset(self):
+        self.instr.write('*RST')
 
 
     def setVscale(self,CHNum,SCALE,POS=0,OFF=0):
@@ -92,7 +89,7 @@ class Control(object):
         self.instr.query_opc()
 
 
-    def acqSetting(self,multiCH=True):
+    def acqSetting(self,multiCH=True,RES=100e-12):
         COMM = 'EXPort:WAVeform:FASTexport ON'
         self.instr.write_str(COMM)
         if multiCH :
@@ -101,19 +98,27 @@ class Control(object):
         else:
             COMM = 'CHANnel1:WAVeform1:STATe 1'
             self.instr.write_str(COMM)
-            
-        COMM = 'ACQuire:COUNt '+str(self.N)
 
+        #COMM = 'ACQuire:SEGMented:MAX ON'
+        #self.instr.write_str(COMM)
+        #disabeled for now
+        
+        COMM = 'ACQuire:COUNt '+str(self.N)
         self.instr.write_str(COMM)
+
+        COMM = 'ACQ:RES '+str(RES)
+        self.instr.write_str(COMM)
+
         COMM = 'ACQ:SEGM:STAT ON'
         self.instr.write_str(COMM)
+
         self.instr.query_opc()
 
 
     def runSingle(self):
-        COMM = 'RUNSingle'
+        COMM = 'SING'
         self.instr.write_str(COMM)
-        self.instr.query_opc()
+        self.instr.query_opc(70000)
 
 
 
@@ -153,6 +158,8 @@ class Control(object):
         COMM = 'CHANnel1:WAV1:HISTory:STATe ON'
         self.instr.query_opc()
         self.instr.write_str(COMM)
+        COMM = 'CHANnel1:WAV1:HISTory:TPAC 40e-6'
+        self.instr.write_str(COMM)
         COMM = 'CHANnel1:WAV1:HISTory:STARt '+str(Hi)
         self.instr.write_str(COMM)
         COMM = 'CHANnel1:WAV1:HISTory:STOP '+str(Hf)
@@ -161,7 +168,7 @@ class Control(object):
         self.instr.write_str(COMM)
         COMM = 'CHANnel1:WAV1:HISTory:PLAY'
         self.instr.write_str(COMM)
-        self.instr.query_opc()
+        self.instr.query_opc(70000)
 
     def waitForCommand(self):
         self.instr.query_opc()
@@ -185,5 +192,26 @@ class Control(object):
         print ('done')
 
 
-if __name__ == '__main__':
-    cont = Control('TEST')
+
+    def copyFileName(self,fileName):
+
+        self.instr.query_opc()
+        FileLocationName = self.Location.strip('"')
+        
+        FileLocationName = self.Location+str(fileName)#+'"'
+        print (FileLocationName)
+
+
+        File0 = FileLocationName+'.Wfm'+self.FileFormat
+        File1 = FileLocationName+self.FileFormat
+        File0 = File0.strip('"')
+
+        File1 = File1.strip('"')
+        Local0 = fileName+'.Wfm'+self.FileFormat
+        Local1 = fileName+self.FileFormat 
+        print ('transfering files {} and {}'.format(File0,File1))
+        self.instr.read_file_from_instrument_to_pc(File1,Local1)
+        self.instr.query_opc()
+        self.instr.read_file_from_instrument_to_pc(File0,Local0)
+        self.instr.query_opc()
+        print ('done')

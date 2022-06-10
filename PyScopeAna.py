@@ -3,18 +3,13 @@ import sys
 from time import time
 import xml.etree.ElementTree as ET
 
-
-"""
-set of functions to help analyise RTP scope int 8, bin data
-can be used to read int 16 data as well
-"""
 #from scipy.integrate import simps
 
 def getBinData(FILENAME,dType=np.int8):
-    # assuming int8 data, load
+    # data can be int.8 or int.16 
     with open(str(FILENAME),'rb') as f: #BIN files with int8 (can be int16)
         BINWFM = np.fromfile(f,dtype=dType)
-        print (int(len(BINWFM)/2))
+        #print (int(len(BINWFM)/2))
         return (BINWFM)
 
 
@@ -130,18 +125,73 @@ def IntegratedData(CHVOLT,N,TIME,Log=False):
     return (INTEGCH)
 
 
-def scopeData(DataName,HeaderName):
-    N,COV,dt,nt,dV_COUNT,CH1_POS,CH2_POS,CH3_POS,CH4_POS,CH1_dVpD,CH2_dVpD,CH3_dVpD,CH4_dVpD,CH1_OFF,CH2_OFF,CH3_OFF,CH4_OFF = readHEADER(HeaderName)
-    F0Data = getBinData(DataName)
-    CH1_FAC,CH1_VOL_OFF = CONfactor(CH1_dVpD,dV_COUNT,COV,CH1_OFF,CH1_POS) 
-    CH2_FAC,CH2_VOL_OFF = CONfactor(CH2_dVpD,dV_COUNT,COV,CH2_OFF,CH1_POS)
-    BCH1,BCH2 = splitCH(F0Data,int(len(F0Data)/2))
-    TIME = getTime(dt,nt)
-    CH1V,CH2V = getVoltage(BCH1,CH1_FAC,CH1_VOL_OFF),getVoltage(BCH2,CH2_FAC,CH2_VOL_OFF)
-    CH1V,CH2V = fixCHdata(CH1V,4),fixCHdata(CH2V,4)
-    CH1V,CH2V = CH1V.reshape(N,nt),CH2V.reshape(N,nt)
-    return CH1V,CH2V,TIME
+def scopeData(DataName,HeaderName,BaseLineRemove=False,integData=False):
+        N,COV,dt,nt,dV_COUNT,CH1_POS,CH2_POS,CH3_POS,CH4_POS,CH1_dVpD,CH2_dVpD,CH3_dVpD,CH4_dVpD,CH1_OFF,CH2_OFF,CH3_OFF,CH4_OFF = readHEADER(HeaderName)
+        if COV == 64768:
+            dtype = np.int16
+            nd = 4
+        elif COV == 253:
+            dtype = np.int8
+            nd = 8
+        else:
+            print ('data type unknown')
+            exit() 
+        
+        F0Data = getBinData(DataName,dtype)
+        
+        F0Data = F0Data[nd:]
+        
+    
+        CH1_FAC,CH1_VOL_OFF = CONfactor(CH1_dVpD,dV_COUNT,COV,CH1_OFF,CH1_POS) 
+        CH2_FAC,CH2_VOL_OFF = CONfactor(CH2_dVpD,dV_COUNT,COV,CH2_OFF,CH1_POS)
+        BCH1,BCH2 = splitCH(F0Data,int(len(F0Data)/2))
+        TIME = getTime(dt,nt)
+        CH1V,CH2V = getVoltage(BCH1,CH1_FAC,CH1_VOL_OFF),getVoltage(BCH2,CH2_FAC,CH2_VOL_OFF)
+    
+        CH1V,CH2V = CH1V.reshape(N,nt),CH2V.reshape(N,nt)
+        if BaseLineRemove and not integData:
+            CH1RB = removeBaseLine(CH1V,N,10,nt)
+            return CH1V,CH2V,CH1RB,TIME
+        if integData and not BaseLineRemove:
+            CH1INTG = IntegratedData(CH1V,N,TIME)
+            return CH1V,CH2V,CH1INTG,TIME
+        if BaseLineRemove and integData:
+            CH1RB = removeBaseLine(CH1V,N,10,nt)
+            CH1INTG = IntegratedData(CH1V,N,TIME)
+            return CH1V,CH2V,CH1RB,CH1INTG,TIME
+        else:
+            return CH1V,CH2V,TIME
     
     
     
+def getPosition(CH,point,N):
+        POS = np.empty(N)
+        for j in range(N):
+            x = CH[j][point]
+            POS[j] = x
+        return POS
     
+def getTuneSpec(POS,dn=1):
+        PowSpec = np.absolute(np.fft.rfft(POS))
+        n = POS.size
+        tune = np.fft.rfftfreq(n,dn)
+        return (tune,PowSpec)
+        
+
+
+def getTunefromScope(rootname,pi=0.41,pf=0.44,BaseLineRemove=True,integData=True,returnPOS=False):
+        F0,F0Wfm = rootname+'.bin',rootname+'.Wfm.bin'
+        N,COV,dt,nt,dV_COUNT,CH1_POS,CH2_POS,CH3_POS,CH4_POS,CH1_dVpD,CH2_dVpD,CH3_dVpD,CH4_dVpD,CH1_OFF,CH2_OFF,CH3_OFF,CH4_OFF = readHEADER(F0)
+        CH1VT,CH2VT,CH1RB,CHINTG,TIME = scopeData(F0Wfm,F0,BaseLineRemove=True,integData=True)
+        point = int(nt/2) # center point of the data
+        P1,P2,P3 = getPosition(CH1VT,point,N),getPosition(CH1RB,point,N),getPosition(CHINTG,point,N)
+        freq1 = np.arange(0,N)/(N)
+        freq1 = freq1[:int(N/2+1)]
+        x1,y1 = getTuneSpec(P1,dn=1)[0][((freq1 > pi) & (freq1 < pf))],getTuneSpec(P1,dn=1)[1][((freq1 > pi) & (freq1 < pf))]
+        x2,y2 = getTuneSpec(P2,dn=1)[0][((freq1 > pi) & (freq1 < pf))],getTuneSpec(P2,dn=1)[1][((freq1 > pi) & (freq1 < pf))]
+        x3,y3 = getTuneSpec(P3,dn=1)[0][((freq1 > pi) & (freq1 < pf))],getTuneSpec(P3,dn=1)[1][((freq1 > pi) & (freq1 < pf))]
+        print ('expected tune: ', x1[np.argmax(y1)],x1[np.argmax(y2)],x1[np.argmax(y3)])
+        if returnPOS:
+            return (P1,P2,P3,x1,y1,y2,y3)
+        else:
+            return (x1,y1,y2,y3)
