@@ -1,7 +1,7 @@
 from RsInstrument import *  # The RsInstrument package is hosted on pypi.org, see Readme.txt for more details
 
-resource_string_1 = 'TCPIP::131.225.137.193::inst0::INSTR'  # Standard LAN connection (also called VXI-11)
-resource_string_2 = 'TCPIP::131.225.137.193::hislip0::INSTR'  # Hi-Speed LAN connection - see 1MA208
+resource_string_1 = 'TCPIP::131.***.***.***::inst0::INSTR'  # Standard LAN connection (also called VXI-11)
+resource_string_2 = 'TCPIP::131.***.***.***::hislip0::INSTR'  # Hi-Speed LAN connection - see 1MA208
 
 import sys
 
