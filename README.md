@@ -4,13 +4,22 @@ python3 oneRun.py -h
 
 set the options for a single run on the scope
 
+
 positional arguments:
+
+
   rootname    root file name
+
   frames      number of frames
+
   run         run number
+
   CH1_dV      Voltag per Division for CH1
+
   CH2_dV      Voltag per Division for CH2
+
   dt          Time per divison (H-SCALE)
+
   RES         Resolution H-SCALE
 
 Example:
@@ -34,6 +43,8 @@ will look for the tune in the rootname file (Wfm data) with bin data between 0.4
 
 The output will be 4 arrays each with shape (N) (Number of frames x number of points):
 freq
+
+
 tune from CH1 without anything
 
 tune from CH1 with BaseLineRemoved
